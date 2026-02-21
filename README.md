@@ -4,11 +4,20 @@ An **AI-native financial automation platform** for processing heterogeneous invo
 
 ---
 
+## 🆕 Recent Updates (Feb 2026)
+
+- ✅ **Confidence Display Fixed**: Now shows 80%-100% instead of 0.8%-1.0%
+- 🤖 **Enhanced Chatbot**: Supports hyphenated vendor names (e.g., "Moore-Miller")
+- 📁 **Path Resolution**: Fixed HuggingFace dataset file paths
+- 📊 **Quality Dashboard**: All confidence charts now display as percentages (0-100%)
+
+---
+
 ## 📸 Implementation at a Glance
 
 | Overview | Invoice List & Bulk Actions |
 |----------|-----------------------------|
-| ![E-Invoice Review Dashboard – overview, filters, and status distribution](assets/1.png) | ![Invoice list table, export, and bulk reprocess](assets/2.png) |
+| ![E-Invoice Review Dashboard – overview, filters, and status distribution](assets/1.png) | ![Invoice list table with confidence scores (80%-100%)](assets/2.png) |
 
 | Invoice Detail & Extracted Data | Validation Analysis |
 |----------------------------------|---------------------|
@@ -16,11 +25,11 @@ An **AI-native financial automation platform** for processing heterogeneous invo
 
 | Upload Files | Chat with Invoices |
 |--------------|--------------------|
-| ![Drag-and-drop upload for PDF, Excel, and images](assets/5.png) | ![Natural-language chatbot over invoice data](assets/6.png) |
+| ![Drag-and-drop upload for PDF, Excel, and images](assets/5.png) | ![Natural-language chatbot with vendor name search (e.g., Moore-Miller)](assets/6.png) |
 
 | Quality Metrics | Financial Summary |
 |-----------------|-------------------|
-| ![Extraction quality, confidence, and format distribution](assets/7.png) | ![Total amount, tax breakdown, and currency distribution](assets/8.png) |
+| ![Extraction quality with confidence percentages (80%-100%)](assets/7.png) | ![Total amount, tax breakdown, and currency distribution](assets/8.png) |
 
 ---
 
