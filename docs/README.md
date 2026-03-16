@@ -1,6 +1,6 @@
 # Documentation Index
 
-Reference for the current AI E-Invoicing implementation: dashboard, API, ingestion, and configuration.
+Reference for the current AI AI-Invoice implementation: dashboard, API, ingestion, and configuration.
 
 ## Implementation summaries
 

@@ -69,13 +69,22 @@ async def process_invoices(
     # Supported extensions (images, PDF, spreadsheet)
     SUPPORTED_EXTENSIONS = {
         ".jpg", ".jpeg", ".png", ".webp", ".avif", ".pdf", ".tiff",
-        ".csv", ".xlsx", ".xls"
+        ".csv", ".xlsx", ".xls", ".docx"
     }
     
     # Resolve search directory
+    # If user specifies a relative path, treat it as relative to data/ by default
     if not search_dir.is_absolute():
-        search_dir = Path.cwd() / search_dir
-        
+        # If the path exists as given, use it; otherwise, try under data/
+        if search_dir.exists():
+            search_dir = search_dir.resolve()
+        else:
+            candidate = Path.cwd() / "data" / search_dir
+            if candidate.exists():
+                search_dir = candidate.resolve()
+            else:
+                search_dir = (Path.cwd() / search_dir).resolve()
+
     if not search_dir.exists():
         print(f"❌ Directory not found: {search_dir}")
         return
@@ -85,11 +94,12 @@ async def process_invoices(
         files = list(search_dir.rglob(pattern))
     else:
         files = list(search_dir.glob(pattern))
-        
+
     # Filter for supported files
     invoice_files = sorted([
-        f for f in files 
+        f for f in files
         if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
+           and not str(f).startswith(str(Path.cwd() / "output"))
     ])
     
     if not invoice_files:
@@ -119,12 +129,14 @@ async def process_invoices(
             try:
                 # Attempt to get path relative to data root if within it
                 if file_path.is_relative_to(data_root.absolute()) or file_path.is_relative_to(data_root):
-                    # Handle cases where data_root is relative or absolute
                     try:
                         relative_path = str(file_path.relative_to(data_root.absolute()))
                     except ValueError:
                         relative_path = str(file_path.relative_to(data_root))
                 else:
+                    # If file is in output/, skip it
+                    if str(file_path).startswith(str(Path.cwd() / "output")):
+                        return None
                     relative_path = file_path.name
             except ValueError:
                 relative_path = file_path.name
@@ -206,7 +218,7 @@ if __name__ == "__main__":
         "--dir", "-d",
         type=Path,
         default=Path("data"),
-        help="Directory to search for invoices (default: data/)",
+        help="Directory to search for invoices (default: data/). Use subfolders like data/csv/, data/pdf/, data/ocr/ for file-type grouping.",
     )
     parser.add_argument(
         "--pattern", "-p",
@@ -234,7 +246,7 @@ if __name__ == "__main__":
         "--data-root",
         type=Path,
         default=Path("data"),
-        help="Root data directory for relative path resolution (default: data/)",
+        help="Root data directory for relative path resolution (default: data/). Should match the input folder structure.",
     )
     parser.add_argument(
         "--category", "-c",

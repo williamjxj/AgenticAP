@@ -560,8 +560,8 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 ```python
 # interface/dashboard/app.py
-st.set_page_config(page_title="E-Invoice Review", layout="wide")
-st.title("📄 E-Invoice Review Dashboard")
+st.set_page_config(page_title="AI-Invoice Review", layout="wide")
+st.title("📄 AI-Invoice Review Dashboard")
 
 # Filters
 col1, col2, col3 = st.columns(3)

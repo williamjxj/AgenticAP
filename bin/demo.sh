@@ -21,7 +21,7 @@ if [[ -d venv ]]; then
   source venv/bin/activate
 fi
 
-echo "=== E-Invoice Demo ==="
+echo "=== AI-Invoice Demo ==="
 echo ""
 
 echo "1. Starting database..."

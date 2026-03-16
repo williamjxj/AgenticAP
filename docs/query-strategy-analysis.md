@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-The AI E-Invoicing chatbot currently implements a **cascading fallback query strategy** (vector search → SQL fallback) that is sufficient for MVP but should be upgraded to **parallel hybrid search** before production deployment for financial data reliability.
+The AI AI-Invoice chatbot currently implements a **cascading fallback query strategy** (vector search → SQL fallback) that is sufficient for MVP but should be upgraded to **parallel hybrid search** before production deployment for financial data reliability.
 
 **Current Status**: ✅ Cascade (MVP-Ready)  
 **Recommendation**: 🔄 Upgrade to Parallel Hybrid (Pre-Production Priority)  

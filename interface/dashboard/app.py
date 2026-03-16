@@ -49,7 +49,7 @@ logger = get_logger(__name__)
 
 # Page configuration
 st.set_page_config(
-    page_title="E-Invoice Review Dashboard",
+    page_title="AI-Invoice Review Dashboard",
     page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -95,7 +95,7 @@ async def get_db_session() -> AsyncSession:
 
 def main():
     """Main dashboard application."""
-    st.title("📄 E-Invoice Review Dashboard")
+    st.title("📄 AI-Invoice Review Dashboard")
     st.markdown("Review processed invoices, extracted data, and validation results")
 
     # Initialize database

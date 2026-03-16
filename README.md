@@ -1,4 +1,4 @@
-# AI E-Invoicing: Complexity Collapse
+# AI-Invoice: Complexity Collapse
 
 An **AI-native financial automation platform** for processing heterogeneous invoice formats (PDF, Excel, Images) into structured data. Leveraging **Agentic AI** for "Zero-Template" extraction and self-correcting validation.
 
@@ -17,7 +17,7 @@ An **AI-native financial automation platform** for processing heterogeneous invo
 
 | Overview | Invoice List & Bulk Actions |
 |----------|-----------------------------|
-| ![E-Invoice Review Dashboard – overview, filters, and status distribution](assets/1.png) | ![Invoice list table with confidence scores (80%-100%)](assets/2.png) |
+| ![AI-Invoice Review Dashboard – overview, filters, and status distribution](assets/1.png) | ![Invoice list table with confidence scores (80%-100%)](assets/2.png) |
 
 | Invoice Detail & Extracted Data | Validation Analysis |
 |----------------------------------|---------------------|

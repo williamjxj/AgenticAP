@@ -1,12 +1,12 @@
 [project]
 name = "AgenticAI-einvoicing"
 version = "0.1.0"
-description = "AI-native e-invoicing platform with agentic AI for zero-template extraction"
+description = "AI-native AI-Invoice platform with agentic AI for zero-template extraction"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 authors = [
-    {name = "AI E-Invoicing Team"}
+    {name = "AI AI-Invoice Team"}
 ]
 keywords = ["invoice", "ocr", "ai", "rag", "fastapi", "streamlit"]
 classifiers = [

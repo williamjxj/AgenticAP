@@ -1,6 +1,6 @@
 # Utility Scripts
 
-This directory contains various utility scripts for setting up the environment, processing invoices, and maintaining the database.
+This directory contains Python utility scripts for processing invoices, debugging, and maintaining the database. All shell scripts have been moved to the bin/ directory.
 
 ## � Quick Reference
 
@@ -13,8 +13,7 @@ This directory contains various utility scripts for setting up the environment, 
 | **Test OCR/PDF on a file** | `debug_ocr.py` | `python3 scripts/debug_ocr.py <file>` |
 | **Query/Chat with your data** | `debug_chatbot.py` | `python3 scripts/debug_chatbot.py "query"` |
 | **Reset or clean up data** | `cleanup_data.py` | `python3 scripts/cleanup_data.py --all` |
-| **Start/Restart API server** | `restart_api.sh` | `./scripts/restart_api.sh` |
-| **Initial environment setup** | `setup.sh` | `./scripts/setup.sh` |
+
 
 ---
 
@@ -100,21 +99,11 @@ Tests database connection and schema health.
 
 ---
 
-## 🛠 Setup & Infrastructure
-
-### setup.sh
-Initializes the environment, installs dependencies, and starts Docker services.
-
-### setup_queue.sh
-Sets up the `pgqueuer` schema for background job processing.
-
-### start_safe_api.sh
-Starts the API server in "Safe Mode" (single worker, no reload) optimized for stable batch processing.
-
-### restart_api.sh
-Quick helper to find and restart the FastAPI server.
 
 ---
+
+## Shell Scripts
+All shell scripts have been moved to the `bin/` directory. See `bin/README.md` for usage instructions.
 
 > [!IMPORTANT]
 > - Ensure the FastAPI server is running before using `process_invoices.py`.

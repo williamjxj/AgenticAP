@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     """Application settings."""
 
     # API Settings
-    API_TITLE: str = "E-Invoice Processing API"
+    API_TITLE: str = "AI-Invoice Processing API"
     API_VERSION: str = "1.0.0"
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000

@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="E-Invoice Processing API",
+    title="AI-Invoice Processing API",
     version="1.0.0",
     description="API for processing and querying invoice documents",
     lifespan=lifespan,
@@ -130,7 +130,7 @@ app.include_router(ocr.router)
 async def root():
     """Root endpoint."""
     return {
-        "message": "AgenticAG E-Invoice Processing API",
+        "message": "AgenticAG AI-Invoice Processing API",
         "version": "1.0.0",
         "docs": "/docs",
     }
@@ -146,7 +146,7 @@ def main():
     # Ensure .env is loaded before reading settings
     load_dotenv()
 
-    parser = argparse.ArgumentParser(description="Run the E-Invoice Processing API")
+    parser = argparse.ArgumentParser(description="Run the AI-Invoice Processing API")
     parser.add_argument(
         "--reload", action="store_true", help="Enable auto-reload on code changes"
     )

@@ -16,7 +16,7 @@ To keep the initial implementation as simple as possible, the sources recommend 
 
 You can copy and use this summary to initialize your project:
 
-**Project Name:** `AgenticAP` (Complexity Collapse E-Invoicing)
+**Project Name:** `AgenticAP` (Complexity Collapse AI-Invoice)
 **Strategy:** **"Complexity Collapse"** — using PostgreSQL for everything (data, vectors, and queues) to minimize costs.
 
 #### **Project Folder Structure**

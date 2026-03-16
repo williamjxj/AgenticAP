@@ -1,4 +1,4 @@
-# E-Invoice Scaffold Implementation Documentation
+# AI-Invoice Scaffold Implementation Documentation
 
 **Branch**: `1-e-invoice-scaffold`  
 **Date**: 2024-12-19  

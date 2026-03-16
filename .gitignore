@@ -181,11 +181,8 @@ specs/*/plan.md.draft
 specs/*/temp/
 
 ## William
-#/docs/
-.github/
-.antigravity/
 .obsidian/
-#.cursor/
-#.specify/
 /resources/
 /data/
+/output/
+/specs

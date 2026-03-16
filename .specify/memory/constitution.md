@@ -11,7 +11,7 @@ Templates Updated:
 Follow-up TODOs: None
 -->
 
-# AI E-Invoicing Constitution
+# AI AI-Invoice Constitution
 
 ## Core Principles
 
