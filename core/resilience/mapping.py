@@ -10,7 +10,6 @@ import brain.chatbot.vector_retriever as vector_retriever
 MODULE_MAPPING: Dict[str, Dict[str, Any]] = {
     "ocr": {
         "paddleocr": image_processor.process_image,
-        # We can add deepseek-ocr here later if we implement it
     },
     "llm": {
         "deepseek-chat": chat_engine.ChatbotEngine,

@@ -16,8 +16,31 @@ from brain.chatbot.query_handler import QueryHandler, QueryIntent
 logger = get_logger(__name__)
 
 
+
+
 class ChatbotEngine:
     """Main chatbot engine for processing queries and generating responses."""
+
+    async def _sum_amount_by_subfolder(self, subfolder: str) -> float:
+        """Directly sum total_amount for a given subfolder (dataset/folder) from the database."""
+        stmt = (
+            select(func.coalesce(func.sum(ExtractedData.total_amount), 0))
+            .select_from(Invoice)
+            .join(ExtractedData, Invoice.id == ExtractedData.invoice_id)
+            .where(func.jsonb_extract_path_text(Invoice.upload_metadata, "subfolder").ilike(f"%{subfolder}%"))
+        )
+        result = await self.session.execute(stmt)
+        return float(result.scalar() or 0)
+
+    async def _sum_amount_by_vendor(self, vendor_name: str) -> float:
+        """Directly sum total_amount for a given vendor_name from the database."""
+        stmt = (
+            select(func.coalesce(func.sum(ExtractedData.total_amount), 0))
+            .join(ExtractedData, Invoice.id == ExtractedData.invoice_id)
+            .where(ExtractedData.vendor_name.ilike(f"%{vendor_name}%"))
+        )
+        result = await self.session.execute(stmt)
+        return float(result.scalar() or 0)
 
     def __init__(self, session: AsyncSession):
         """Initialize chatbot engine."""
@@ -85,35 +108,71 @@ class ChatbotEngine:
             if intent.intent_type == QueryHandler.AMBIGUOUS:
                 return self._handle_ambiguous_query(message, language)
 
-            # Retrieve relevant invoices
-            invoice_ids = await self._retrieve_invoices(message, intent)
 
-            # Get invoice data
+            # Hybrid aggregate: always run direct SQL sum for vendor_name aggregate queries
+            invoice_ids = await self._retrieve_invoices(message, intent)
             invoices_data = await self._get_invoices_data(invoice_ids)
 
-            # If no invoices found but query asks about count/total,
-            # try to get ALL invoices to answer the question
-            if not invoices_data and ("how many" in message.lower() or "total" in message.lower() or "count" in message.lower()):
-                logger.info("No specific invoices found, trying to get all invoices for aggregate query")
-                all_invoices_stmt = (
-                    select(Invoice.id)
-                    .outerjoin(ExtractedData, Invoice.id == ExtractedData.invoice_id)
-                    .limit(settings.CHATBOT_MAX_RESULTS)
+            # If this is an aggregate query with vendor_name, always use direct SQL sum
+            if intent.intent_type == QueryHandler.AGGREGATE_QUERY:
+                # Check for subfolder/dataset queries (e.g., jimeng)
+                subfolder = None
+                if "jimeng" in message.lower():
+                    subfolder = "jimeng"
+                # You can add more dataset/folder keywords here if needed
+                if subfolder:
+                    total = await self._sum_amount_by_subfolder(subfolder)
+                    currency = invoices_data[0].get("currency", "USD") if invoices_data else "USD"
+                    response = f"Based on the invoice data, the total cost for the dataset/folder '{subfolder}' is {total:.2f} {currency}."
+                elif "vendor_name" in intent.parameters:
+                    vendor_name = intent.parameters["vendor_name"]
+                    total = await self._sum_amount_by_vendor(vendor_name)
+                    currency = invoices_data[0].get("currency", "USD") if invoices_data else "USD"
+                    response = f"Based on the invoice data, the total cost for the vendor {vendor_name} is {total:.2f} {currency}."
+                else:
+                    # Fallback to original logic
+                    if not invoices_data and ("how many" in message.lower() or "total" in message.lower() or "count" in message.lower()):
+                        logger.info("No specific invoices found, trying to get all invoices for aggregate query")
+                        all_invoices_stmt = (
+                            select(Invoice.id)
+                            .outerjoin(ExtractedData, Invoice.id == ExtractedData.invoice_id)
+                            .limit(settings.CHATBOT_MAX_RESULTS)
+                        )
+                        all_result = await self.session.execute(all_invoices_stmt)
+                        all_ids = [row[0] for row in all_result.fetchall()]
+                        if all_ids:
+                            invoices_data = await self._get_invoices_data(all_ids)
+                            logger.info("Retrieved all invoices for aggregate query", count=len(invoices_data))
+                    response = await self._generate_response(
+                        message=message,
+                        intent=intent,
+                        invoices_data=invoices_data,
+                        session=session,
+                        language=language,
+                    )
+            else:
+                # Fallback to original logic
+                # If no invoices found but query asks about count/total,
+                # try to get ALL invoices to answer the question
+                if not invoices_data and ("how many" in message.lower() or "total" in message.lower() or "count" in message.lower()):
+                    logger.info("No specific invoices found, trying to get all invoices for aggregate query")
+                    all_invoices_stmt = (
+                        select(Invoice.id)
+                        .outerjoin(ExtractedData, Invoice.id == ExtractedData.invoice_id)
+                        .limit(settings.CHATBOT_MAX_RESULTS)
+                    )
+                    all_result = await self.session.execute(all_invoices_stmt)
+                    all_ids = [row[0] for row in all_result.fetchall()]
+                    if all_ids:
+                        invoices_data = await self._get_invoices_data(all_ids)
+                        logger.info("Retrieved all invoices for aggregate query", count=len(invoices_data))
+                response = await self._generate_response(
+                    message=message,
+                    intent=intent,
+                    invoices_data=invoices_data,
+                    session=session,
+                    language=language,
                 )
-                all_result = await self.session.execute(all_invoices_stmt)
-                all_ids = [row[0] for row in all_result.fetchall()]
-                if all_ids:
-                    invoices_data = await self._get_invoices_data(all_ids)
-                    logger.info("Retrieved all invoices for aggregate query", count=len(invoices_data))
-
-            # Generate response
-            response = await self._generate_response(
-                message=message,
-                intent=intent,
-                invoices_data=invoices_data,
-                session=session,
-                language=language,
-            )
 
             # Add assistant message to session
             # Track if we hit the result limit

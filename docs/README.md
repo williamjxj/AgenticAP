@@ -1,8 +1,8 @@
 # Documentation Index
 
-Reference for the current AI AI-Invoice implementation: dashboard, API, ingestion, and configuration.
+This folder contains all technical documentation for the AI-eInvoicing platform: architecture, setup, ingestion, API, dashboard, and advanced topics.
 
-## Implementation summaries
+## Key Documents
 
 | Doc | Description |
 |-----|-------------|
@@ -11,7 +11,7 @@ Reference for the current AI AI-Invoice implementation: dashboard, API, ingestio
 | [Dashboard Improvements](./002-dashboard-improvements.md) | Analytics, export to CSV/PDF, filters, bulk reprocess, status/vendor/financial charts |
 | [Dataset Upload UI](./003-dataset-upload-ui-implementation.md) | Web upload (PDF, Excel, images), processing flow, and upload API |
 | [Invoice Chatbot](./004-invoice-chatbot-implementation.md) | RAG chatbot: sessions, rate limiting, vector retriever, DeepSeek, dashboard tab |
-| [Query Strategy Analysis](./query-strategy-analysis.md) | **Cascade vs Parallel Hybrid Search**: comprehensive analysis, performance comparison, production upgrade path |
+| [Query Strategy Analysis](./query-strategy-analysis.md) | Cascade vs Parallel Hybrid Search: analysis, performance, upgrade path |
 | [Ingestion Workflow Fixes](./005-ingestion-workflow-fixes.md) | Ingestion pipeline fixes and behavior |
 | [Duplicate Processing Logic](./duplicate-processing-logic.md) | File hashing, versioning, and duplicate handling |
 | [Resilient Configuration](./resilient-configuration.md) | Module plugability, runtime configuration APIs, workflow diagram |
@@ -21,7 +21,7 @@ Reference for the current AI AI-Invoice implementation: dashboard, API, ingestio
 | [PDF Implementation](./pdf-implementation.md) | PDF processing (Docling/PyPDF) |
 | [Process Images](./process-images-3.md) | Image processing and pipeline |
 
-## API surface (current)
+## API Surface (current)
 
 - **Health**: `GET /api/v1/health`
 - **Invoices**: process, list, detail, analytics (status-distribution, time-series, vendor-analysis, financial-summary)
@@ -32,11 +32,18 @@ Reference for the current AI AI-Invoice implementation: dashboard, API, ingestio
 - **OCR**: providers, compare, run
 - **Modules / Stages**: configuration metadata
 
-## Dashboard tabs (Streamlit)
+## Dashboard Tabs (Streamlit)
 
-Invoice List (filters, bulk actions, export) → Invoice Detail (preview, extracted data, validation analysis) → Upload Files → Chatbot → Quality Metrics → OCR Compare.
+- Invoice List (filters, bulk actions, export)
+- Invoice Detail (preview, extracted data, validation analysis)
+- Upload Files
+- Chatbot
+- Quality Metrics
+- OCR Compare
 
 ---
+
+For a project overview and quick start, see the main [README.md](../README.md).
 
 # Analysis of AI-EInvoicing RAG & Autonomy Stack
 

@@ -40,43 +40,36 @@ An **AI-native financial automation platform** for processing heterogeneous invo
 - Docker and Docker Compose
 - PostgreSQL (Automated via Docker)
 
-### 2. Setup
-```bash
-# Install dependencies
-pip install -e ".[dev]"
-
-# Configure environment
-# Create .env with:
-# DATABASE_URL=postgresql+asyncpg://einvoice:einvoice_dev@localhost:${PGDB_PORT:-5432}/einvoicing
-# ENCRYPTION_KEY=your-key (Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-# API_PORT=8000, UI_PORT=8501
-```
-
-### 3. Start Services
-```bash
-# Start Database
 docker-compose up -d
 
-# Run Migrations
-alembic upgrade head
+### 2. Setup & Start
+```bash
+# Full environment setup (venv, dependencies, .env, DB, migrations)
+./bin/setup.sh
 
-# Start API
-python interface/api/main.py --reload
+# Start API server (with reload for development)
+./bin/api.sh start
+
+# Start API server in safe mode (no reload, for batch)
+./bin/api.sh safe
+
+# Restart API server
+./bin/api.sh restart
 
 # Start Dashboard (Port 8501)
-streamlit run interface/dashboard/app.py
+./bin/dashboard.sh
 ```
 
 ---
 
 ## 📄 Usage
 
+
 ### Process Invoices
-Run the consolidated script to process files in the `data/` directory:
+Batch process all invoices in the `data/` directory:
 ```bash
-$ python scripts/process_invoices.py
-$ python scripts/process_invoices.py --recursive --dir data/ --force --concurrency 2
-$ python scripts/process_invoices.py --dir data/jimeng --pattern "invoice-1.png" --force --background --api-url "http://127.0.0.1:8800"
+./bin/process_invoices.sh
+# Or use python scripts/process_invoices.py with custom options
 ```
 
 Or via API:

@@ -94,12 +94,11 @@ class Voxel51Adapter(BaseDatasetAdapter):
 
                 invoice_info = annotation.get("invoice", {})
                 financial_info = annotation.get("subtotal", {}) # Note: Voxel51 uses 'subtotal' key for main totals
-                
+
                 # Safe Decimal conversion helper
                 def safe_decimal(val):
                     if val is None or val == "": return None
                     try:
-                        # Remove non-numeric chars except . and -
                         clean_val = "".join(c for c in str(val) if c.isdigit() or c in ".-")
                         return Decimal(clean_val) if clean_val else None
                     except: return None
@@ -124,6 +123,56 @@ class Voxel51Adapter(BaseDatasetAdapter):
                         except ValueError: continue
                     return None
 
+                # --- Vendor (Seller) and Client (Buyer) Extraction ---
+                def extract_party(annotation_dict, keys):
+                    for k in keys:
+                        val = annotation_dict.get(k)
+                        if val:
+                            if isinstance(val, dict):
+                                # Try to join name and address if present
+                                name = val.get("name") or val.get("Name")
+                                if name:
+                                    return name
+                                # Fallback: join all string fields
+                                return ", ".join(str(v) for v in val.values() if isinstance(v, str))
+                            elif isinstance(val, str):
+                                return val
+                    return None
+
+                # Try multiple keys for seller/vendor and client/buyer
+                vendor_name = (
+                    extract_party(invoice_info, ["seller_name", "seller", "vendor", "seller_info"]) or
+                    extract_party(annotation, ["seller", "vendor", "seller_info"]) or
+                    None
+                )
+                client_name = (
+                    extract_party(invoice_info, ["client_name", "client", "buyer", "client_info"]) or
+                    extract_party(annotation, ["client", "buyer", "client_info"]) or
+                    None
+                )
+
+                # Fallback: robustly parse multi-line Seller block from OCR text
+                if not vendor_name and sample_meta.get("ocr_text"):
+                    import re
+                    ocr = sample_meta["ocr_text"]
+                    # Look for 'Seller:' or 'Seller\n' block, capture all lines until 'Client:', 'Date', 'Invoice', or end
+                    m = re.search(r"Seller:?\s*\n?(.+?)(?:\n\s*Client:|\n\s*Date|\n\s*Invoice|$)", ocr, re.DOTALL|re.IGNORECASE)
+                    if m:
+                        block = m.group(1).strip()
+                        lines = [line.strip() for line in block.split("\n") if line.strip()]
+                        # Heuristic: pick the first line that looks like a name (not address, not number, not empty)
+                        for line in lines:
+                            # Skip lines that look like addresses or numbers
+                            if re.match(r"^(\d+|[A-Za-z0-9 .,-]+(Street|St\.|Avenue|Ave\.|Road|Rd\.|Suite|Blvd|Drive|Dr\.|Lane|Ln\.|Ave|Highway|Hwy|PO Box|P\.O\.|Zip|[A-Z]{2}\s*\d{5}|[A-Z]{2,3}\d{2,}|[0-9]{5,}|Tax Id|IBAN|[A-Z]{2}\d{10,}))", line, re.IGNORECASE):
+                                continue
+                            # Skip lines that are too short or generic
+                            if len(line) < 3 or line.lower() in {"seller", "client"}:
+                                continue
+                            vendor_name = line
+                            break
+                        # Fallback: if all lines look like addresses, just use the first line
+                        if not vendor_name and lines:
+                            vendor_name = lines[0]
 
                 results.append(CanonicalInvoiceSchema(
                     source_dataset="voxel51",
@@ -132,7 +181,7 @@ class Voxel51Adapter(BaseDatasetAdapter):
                     file_name=local_filename,
                     invoice_number=invoice_info.get("invoice_number"),
                     invoice_date=parse_date(invoice_info.get("invoice_date")),
-                    vendor_name=invoice_info.get("seller_name"),
+                    vendor_name=vendor_name,
                     line_items=line_items,
                     subtotal=safe_decimal(financial_info.get("subtotal")),
                     tax_amount=safe_decimal(financial_info.get("tax")),

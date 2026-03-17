@@ -27,27 +27,26 @@ class GokulRajaAdapter(BaseDatasetAdapter):
         try:
             ds = load_dataset(self.DATASET_ID, split="train", streaming=True)
             results = []
-            
             count = 0
-            for row in ds:
-                if count >= limit:
+            ds_iter = iter(ds)
+            while count < limit:
+                try:
+                    row = next(ds_iter)
+                except StopIteration:
                     break
-                
+                except Exception as e:
+                    logger.warning(f"Error iterating GokulRajaR dataset: {e}")
+                    break
                 try:
                     img = row["file"]
                     img_id = str(row.get("id") or count)
                     local_filename = f"gokul_{img_id}.jpg"
                     local_path = self.LOCAL_DIR / local_filename
-                    
                     if not local_path.exists():
                         img.convert("RGB").save(local_path, "JPEG")
-                    
                     img_hash = str(imagehash.phash(img))
-                    
-                    # GokulRajaR has 'data' which is a JSON-like string
                     import json
                     import ast
-                    
                     labels = {}
                     data_str = row.get("data")
                     if data_str:
@@ -60,27 +59,23 @@ class GokulRajaAdapter(BaseDatasetAdapter):
                                 try:
                                     labels = ast.literal_eval(data_str)
                                 except Exception:
-                                    logger.warning(f"Failed to parse GokulRajaR data: {data_str[:100]}")
-                    
-                    # Safe Decimal conversion helper
+                                    logger.warning(f"Failed to parse GokulRajaR data: {str(data_str)[:100]}")
                     def safe_decimal(val):
                         if val is None or val == "": return None
                         try:
                             clean_val = "".join(c for c in str(val) if c.isdigit() or c in ".-")
                             return Decimal(clean_val) if clean_val else None
                         except: return None
-
                     line_items = []
                     for idx, item in enumerate(labels.get("line_items", [])):
                         if isinstance(item, dict):
-                          line_items.append(LineItem(
-                              description=item.get("description"),
-                              quantity=safe_decimal(item.get("quantity")),
-                              unit_price=safe_decimal(item.get("unit_price")),
-                              amount=safe_decimal(item.get("amount")),
-                              line_order=idx
-                          ))
-
+                            line_items.append(LineItem(
+                                description=item.get("description"),
+                                quantity=safe_decimal(item.get("quantity")),
+                                unit_price=safe_decimal(item.get("unit_price")),
+                                amount=safe_decimal(item.get("amount")),
+                                line_order=idx
+                            ))
                     results.append(CanonicalInvoiceSchema(
                         source_dataset="gokulraja",
                         source_id=img_id,
@@ -100,9 +95,9 @@ class GokulRajaAdapter(BaseDatasetAdapter):
                 except Exception as e:
                     logger.warning(f"Error processing GokulRajaR row: {e}")
                     continue
-            
+            # Explicitly delete iterator to help cleanup
+            del ds_iter
             return results
-
         except Exception as e:
             logger.error(f"Failed to load GokulRajaR dataset: {e}")
             return []
