@@ -2,16 +2,17 @@
 
 An **AI-native financial automation platform** for processing heterogeneous invoice formats (PDF, Excel, Images) into structured data. Leveraging **Agentic AI** for "Zero-Template" extraction and self-correcting validation.
 
----
+## 🆕 Key capabilities under development
 
-## 🆕 Recent Updates (Feb 2026)
+• Autonomous document intake agent: classifies document type, origin, and quality before routing
+• OCR + LLM extraction agent: fuses OCR output with LLM semantic parsing to reconstruct structured
+invoice data
+• Hybrid retrieval agent: resolves vendor identity, GL codes, and PO matching via Vector + SQL
+parallel search
+• Validation and exception agent: detects anomalies, flags low-confidence fields, and escalates for
+human review
+• Reconciliation agent: posts validated entries to accounting schemas and generates audit trails
 
-- ✅ **Confidence Display Fixed**: Now shows 80%-100% instead of 0.8%-1.0%
-- 🤖 **Enhanced Chatbot**: Supports hyphenated vendor names (e.g., "Moore-Miller")
-- 📁 **Path Resolution**: Fixed HuggingFace dataset file paths
-- 📊 **Quality Dashboard**: All confidence charts now display as percentages (0-100%)
-
----
 
 ## 📸 Implementation at a Glance
 
@@ -161,6 +162,10 @@ graph TB
 - **Zero-Template Extraction**: AI reads and reasons about layout variations without hardcoded templates
 - **Validation with Auto-Retry**: Failed validations trigger alternative extraction strategies before human review
 - **Embeddings**: Generated during ingestion for semantic search (optional, chatbot falls back to SQL if unavailable)
+
+**On the way:**
+- LangGraph Multi-Agent Orchestration
+- Hybrid Retrieval Subsystem
 
 ---
 

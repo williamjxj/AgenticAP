@@ -1,6 +1,6 @@
 # Multi-Dataset Ingestion System
 
-This document outlines the implementation of the advanced multi-dataset ingestion system for the AI AI-Invoice platform.
+This document outlines the implementation of the advanced multi-dataset ingestion system for the AI-Invoice platform.
 
 ## Overview
 

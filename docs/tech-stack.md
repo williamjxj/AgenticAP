@@ -1,6 +1,6 @@
 # Tech Stack & Alternative Solutions
 
-> **Purpose**: This document catalogs the complete technology stack used in the AI AI-Invoice platform, along with viable alternatives for each component. It serves as a reference for architectural decisions and explores emerging solutions that could enhance or replace current implementations.
+> **Purpose**: This document catalogs the complete technology stack used in the AI-Invoice platform, along with viable alternatives for each component. It serves as a reference for architectural decisions and explores emerging solutions that could enhance or replace current implementations.
 
 ---
 
@@ -365,7 +365,7 @@ graph TB
 ```mermaid
 %%{init: {'theme':'base'}}%%
 quadrantChart
-    title AI AI-Invoice Technology Radar
+    title AI-Invoice Technology Radar
     x-axis "Adopt" --> "Hold"
     y-axis "Trial" --> "Assess"
     quadrant-1 "ADOPT"
@@ -530,4 +530,4 @@ This document should be updated when:
 3. Cost/performance benchmarks change significantly
 4. Team makes a technology decision (document rationale here)
 
-**Maintainer**: AI AI-Invoice Team
+**Maintainer**: AI-Invoice Team

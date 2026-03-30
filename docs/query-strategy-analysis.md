@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-The AI AI-Invoice chatbot currently implements a **cascading fallback query strategy** (vector search → SQL fallback) that is sufficient for MVP but should be upgraded to **parallel hybrid search** before production deployment for financial data reliability.
+The AI-Invoice chatbot currently implements a **cascading fallback query strategy** (vector search → SQL fallback) that is sufficient for MVP but should be upgraded to **parallel hybrid search** before production deployment for financial data reliability.
 
 **Current Status**: ✅ Cascade (MVP-Ready)  
 **Recommendation**: 🔄 Upgrade to Parallel Hybrid (Pre-Production Priority)  
@@ -170,7 +170,7 @@ Looking at [brain/chatbot/engine.py](../brain/chatbot/engine.py#L248-L342), the 
 
 ### How It Would Work
 
-Execute **both** vector search AND SQL full-text search **in parallel**, then merge results using Reciprocal Rank Fusion (RRF):
+Execute **both** vector search AND SQL full-text search **in parallel**, then merge results using Reciprocal Rank Fusion (RRF相互排名融合):
 
 ```
 User Query: "Find invoice INV-2024-001 from Acme"
@@ -211,43 +211,6 @@ User Query: "Find invoice INV-2024-001 from Acme"
          │ 3. uuid-5 (semantic)    │
          │ 4. uuid-2 (keyword)     │
          └─────────────────────────┘
-```
-
-### Reciprocal Rank Fusion (RRF) Algorithm
-
-```python
-def reciprocal_rank_fusion(
-    vector_results: List[UUID],
-    sql_results: List[UUID],
-    k: int = 60
-) -> List[UUID]:
-    """
-    Merge two ranked result lists using RRF.
-    
-    RRF Score = Σ(1 / (k + rank))
-    Higher scores = better results
-    
-    Args:
-        vector_results: Results from vector search (ordered by similarity)
-        sql_results: Results from SQL full-text search (ordered by relevance)
-        k: Constant to prevent division by very small numbers (default: 60)
-    
-    Returns:
-        Merged and re-ranked list of invoice UUIDs
-    """
-    scores: Dict[UUID, float] = {}
-    
-    # Add scores from vector search
-    for rank, doc_id in enumerate(vector_results, start=1):
-        scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
-    
-    # Add scores from SQL search
-    for rank, doc_id in enumerate(sql_results, start=1):
-        scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
-    
-    # Sort by total score (descending)
-    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    return [doc_id for doc_id, score in ranked]
 ```
 
 **Why RRF?**
@@ -393,199 +356,13 @@ class SQLRetriever:
 
 Create `brain/chatbot/hybrid_retriever.py`:
 
-```python
-"""Hybrid retriever combining vector and SQL full-text search."""
-
-from typing import List, Dict
-from uuid import UUID
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.config import settings
-from core.logging import get_logger
-from brain.chatbot.vector_retriever import VectorRetriever
-from brain.chatbot.sql_retriever import SQLRetriever
-
-logger = get_logger(__name__)
-
-
-class HybridRetriever:
-    """Combines vector and SQL full-text search using RRF."""
-
-    def __init__(self, session: AsyncSession):
-        """Initialize hybrid retriever."""
-        self.session = session
-        self.vector_retriever = VectorRetriever(session=session)
-        self.sql_retriever = SQLRetriever(session=session)
-
-    async def search_hybrid(
-        self,
-        query_text: str,
-        limit: int | None = None,
-        rrf_k: int = 60,
-    ) -> List[UUID]:
-        """
-        Search using both vector and SQL, merge with RRF.
-        
-        Args:
-            query_text: User's query
-            limit: Maximum results to return
-            rrf_k: RRF constant (default: 60)
-            
-        Returns:
-            Merged and re-ranked invoice UUIDs
-        """
-        if limit is None:
-            limit = settings.CHATBOT_MAX_RESULTS
-        
-        # Execute both searches in parallel using asyncio.gather
-        import asyncio
-        
-        vector_results, sql_results = await asyncio.gather(
-            self.vector_retriever.search_similar(query_text, limit=limit * 2),
-            self.sql_retriever.search_fulltext(query_text, limit=limit * 2),
-            return_exceptions=True,
-        )
-        
-        # Handle exceptions
-        if isinstance(vector_results, Exception):
-            logger.warning("Vector search failed in hybrid", error=str(vector_results))
-            vector_results = []
-        
-        if isinstance(sql_results, Exception):
-            logger.warning("SQL search failed in hybrid", error=str(sql_results))
-            sql_results = []
-        
-        # If both failed, return empty
-        if not vector_results and not sql_results:
-            logger.warning("Both vector and SQL search returned no results")
-            return []
-        
-        # Apply Reciprocal Rank Fusion
-        merged_results = self._reciprocal_rank_fusion(
-            vector_results,
-            sql_results,
-            k=rrf_k,
-        )
-        
-        logger.info(
-            "Hybrid search completed",
-            query=query_text[:50],
-            vector_count=len(vector_results),
-            sql_count=len(sql_results),
-            merged_count=len(merged_results),
-        )
-        
-        return merged_results[:limit]
-
-    def _reciprocal_rank_fusion(
-        self,
-        vector_results: List[UUID],
-        sql_results: List[UUID],
-        k: int = 60,
-    ) -> List[UUID]:
-        """
-        Merge two ranked lists using Reciprocal Rank Fusion.
-        
-        RRF Score = Σ(1 / (k + rank))
-        
-        Args:
-            vector_results: Vector search results (ranked)
-            sql_results: SQL search results (ranked)
-            k: RRF constant to prevent division issues
-            
-        Returns:
-            Merged and re-ranked UUIDs
-        """
-        scores: Dict[UUID, float] = {}
-        
-        # Add scores from vector search
-        for rank, doc_id in enumerate(vector_results, start=1):
-            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
-        
-        # Add scores from SQL search
-        for rank, doc_id in enumerate(sql_results, start=1):
-            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
-        
-        # Sort by score (descending)
-        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        
-        return [doc_id for doc_id, score in ranked]
-```
-
 ### Phase 4: Update ChatbotEngine (0.5 days)
 
 Modify `brain/chatbot/engine.py`:
 
-```python
-from brain.chatbot.hybrid_retriever import HybridRetriever
-
-class ChatbotEngine:
-    def __init__(self, session: AsyncSession):
-        self.session = session
-        # Replace vector_retriever with hybrid_retriever
-        self.hybrid_retriever = HybridRetriever(session=session)
-        # ... rest of init
-
-    async def _retrieve_invoices(self, query: str, intent: QueryIntent) -> List[UUID]:
-        # ... UUID and intent checks (unchanged)
-        
-        # Use hybrid search instead of cascade
-        invoice_ids = await self.hybrid_retriever.search_hybrid(
-            query_text=query,
-            limit=settings.CHATBOT_MAX_RESULTS,
-        )
-        
-        # No fallback needed - hybrid already combines both methods
-        return invoice_ids
-```
-
 ### Phase 5: Testing & Validation (0.5 days)
 
 Create `tests/integration/test_hybrid_retriever.py`:
-
-```python
-"""Integration tests for hybrid retriever."""
-
-import pytest
-from brain.chatbot.hybrid_retriever import HybridRetriever
-
-@pytest.mark.asyncio
-async def test_hybrid_exact_match_priority(db_session, sample_invoices):
-    """Exact matches should rank higher than semantic matches."""
-    retriever = HybridRetriever(session=db_session)
-    
-    results = await retriever.search_hybrid("INV-2024-001")
-    
-    # First result should be the exact match
-    assert results[0] == sample_invoices["INV-2024-001"].id
-
-@pytest.mark.asyncio
-async def test_hybrid_mixed_query(db_session, sample_invoices):
-    """Hybrid queries should combine semantic and keyword."""
-    retriever = HybridRetriever(session=db_session)
-    
-    results = await retriever.search_hybrid("expensive software from Acme")
-    
-    # Should find Acme invoices with software-related content
-    assert len(results) > 0
-    # Acme invoices should be ranked high
-    top_5 = results[:5]
-    acme_count = sum(1 for id in top_5 if sample_invoices[id].vendor == "Acme")
-    assert acme_count >= 1
-
-@pytest.mark.asyncio
-async def test_hybrid_graceful_degradation(db_session, sample_invoices):
-    """Should work even if one search method fails."""
-    retriever = HybridRetriever(session=db_session)
-    
-    # Mock vector retriever to fail
-    retriever.vector_retriever.search_similar = lambda *args, **kwargs: []
-    
-    results = await retriever.search_hybrid("Acme Corp")
-    
-    # Should still return results from SQL
-    assert len(results) > 0
-```
 
 ---
 

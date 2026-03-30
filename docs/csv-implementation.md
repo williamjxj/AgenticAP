@@ -1,6 +1,6 @@
 # CSV and XLSX Processing Implementation
 
-This document describes the technical implementation and workflow for processing tabular invoice data (CSV, XLSX, XLS) within the AI AI-Invoice system.
+This document describes the technical implementation and workflow for processing tabular invoice data (CSV, XLSX, XLS) within the AI-Invoice system.
 
 ## Overview
 
