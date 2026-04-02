@@ -9,6 +9,8 @@ Auto-generated from all feature plans. Last updated: 2026-01-05
 - PostgreSQL 17 with pgvector extension (001-ui-data-extract-quality)
 - Python 3.12 + FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), asyncpg, structlog (001-resilient-config)
 - Python 3.12 + FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), asyncpg, paddleocr, deepseek (001-ocr-switch-options)
+- Python 3.12 (existing API); TypeScript / Node 20+ (frontend); Next.js **latest** (as of plan date: **16.x** via `create-next-app@latest`, then lock versions in `package-lock.json`). + FastAPI + Pydantic (backend, unchanged); Next.js App Router, Tailwind CSS, shadcn/ui (Radix), TanStack Query, TanStack Table, Recharts (charts), client for HTTP (Fetch API wrapper or axios — decide in `frontend/` and document in README). (001-migrate-streamlit-next)
+- PostgreSQL + existing file storage under `data/` (unchanged); frontend has no direct DB access. (001-migrate-streamlit-next)
 
 - Python 3.12 + Streamlit >=1.39.0, pandas >=2.2.0, plotly >=5.18.0 (for charts), reportlab >=4.0.0 (for PDF export), sqlalchemy[asyncio] >=2.0.36 (002-dashboard-improvements)
 
@@ -28,9 +30,9 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.12: Follow standard conventions
 
 ## Recent Changes
+- 001-migrate-streamlit-next: Added Python 3.12 (existing API); TypeScript / Node 20+ (frontend); Next.js **latest** (as of plan date: **16.x** via `create-next-app@latest`, then lock versions in `package-lock.json`). + FastAPI + Pydantic (backend, unchanged); Next.js App Router, Tailwind CSS, shadcn/ui (Radix), TanStack Query, TanStack Table, Recharts (charts), client for HTTP (Fetch API wrapper or axios — decide in `frontend/` and document in README).
 - 001-ocr-switch-options: Added Python 3.12 + FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), asyncpg, paddleocr, deepseek
 - 001-resilient-config: Added Python 3.12 + FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), asyncpg, structlog
-- 001-ui-data-extract-quality: Added Python 3.12 + FastAPI 0.115.x, Streamlit 1.40.x, SQLAlchemy 2.0.36, Pydantic 2.10.x, pandas 2.2.3, pypdf 5.1.x, PaddleOCR 2.9.x, OpenAI 1.58.x
 
 
 <!-- MANUAL ADDITIONS START -->

@@ -104,10 +104,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS
+# Configure CORS — comma-separated `CORS_ORIGINS` and/or single `FRONTEND_URL`; default "*" for local/API tooling
+def _cors_allow_origins() -> list[str]:
+    chunks: list[str] = []
+    for key in ("CORS_ORIGINS", "FRONTEND_URL"):
+        raw = os.getenv(key, "").strip()
+        if not raw:
+            continue
+        chunks.extend(p.strip() for p in raw.split(",") if p.strip())
+    if not chunks:
+        return ["*"]
+    # De-dupe while preserving order
+    seen: set[str] = set()
+    out: list[str] = []
+    for o in chunks:
+        if o not in seen:
+            seen.add(o)
+            out.append(o)
+    return out
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=_cors_allow_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

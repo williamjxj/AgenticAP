@@ -1,6 +1,17 @@
-# AI-Invoice: Complexity Collapse
+# AI-Invoice: AI-driven accounts payable automation
 
 An **AI-native financial automation platform** for processing heterogeneous invoice formats (PDF, Excel, Images) into structured data. Leveraging **Agentic AI** for "Zero-Template" extraction and self-correcting validation.
+
+Automates the full invoice lifecycle — ingestion, extraction, validation, and routing — using LLM agents and ETL pipelines. Eliminates manual data entry from financial document processing for enterprise finance teams.
+
+**Services:**
+Invoice ingestion, Data extraction, GL coding, Approval routing, ERP integration
+
+**Highlights:**
+- LLM agent pipeline: Handles variable layouts
+- Multi-format input: PDF, scan, email, EDI
+- Exception handling: Flags anomalies automatically
+- Audit trail: Full traceability per document
 
 ## 🆕 Key capabilities under development
 

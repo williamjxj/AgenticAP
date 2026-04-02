@@ -175,6 +175,15 @@ dmypy.json
 .ruff_cache/
 .pylint.d/
 
+# Node.js / Next.js (frontend/)
+node_modules/
+.next/
+out/
+.cache/
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+
 # Speckit workflow (keep templates, ignore instance data)
 specs/*/research.md.draft
 specs/*/plan.md.draft

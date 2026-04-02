@@ -1,7 +1,7 @@
 """File upload route handlers."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -435,7 +435,10 @@ async def get_upload_status(
         data=UploadStatusData(
             invoice_id=str(invoice.id),
             file_name=invoice.file_name,
-            file_path=invoice.file_path,
+            storage_path=invoice.storage_path,
+            category=invoice.category,
+            group=invoice.group,
+            job_id=str(invoice.job_id) if invoice.job_id else None,
             processing_status=invoice.processing_status.value,
             upload_metadata=upload_metadata,
             error_message=invoice.error_message,

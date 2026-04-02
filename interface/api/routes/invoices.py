@@ -1,18 +1,27 @@
 """Invoice route handlers."""
 
+import mimetypes
 import uuid
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from core.database import get_session
 from core.logging import get_logger
 from core.models import ExtractedData, Invoice, ProcessingStatus, ValidationResult
 from core.queue import get_queries
 from ingestion.orchestrator import process_invoice_file
+from interface.api.invoice_list_filters import (
+    apply_invoice_list_filters,
+    base_invoice_list_select,
+    invoice_list_count_select,
+)
 from interface.api.schemas import (
     BulkActionItem,
     BulkActionResponse,
@@ -30,28 +39,16 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/invoices", tags=["Invoices"])
 
 
-@router.get("", response_model=InvoiceListResponse)
-async def list_invoices(
-    status: Annotated[str | None, Query(description="Filter by processing status")] = None,
-    page: Annotated[int, Query(ge=1, description="Page number (1-indexed)")] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
-    sort_by: Annotated[str, Query(description="Sort field")] = "created_at",
-    sort_order: Annotated[str, Query(description="Sort order")] = "desc",
-    session: AsyncSession = Depends(get_session),
-) -> InvoiceListResponse:
-    """List processed invoices with pagination and filtering."""
-    # Build query
-    query = select(Invoice)
+def _status_param(status: str | None) -> ProcessingStatus | None:
+    if not status:
+        return None
+    try:
+        return ProcessingStatus(status)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from e
 
-    # Apply status filter
-    if status:
-        try:
-            status_enum = ProcessingStatus(status)
-            query = query.where(Invoice.processing_status == status_enum)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
 
-    # Apply sorting
+def _sort_columns(sort_by: str, sort_order: str):
     if sort_by == "created_at":
         sort_column = Invoice.created_at
     elif sort_by == "processed_at":
@@ -60,37 +57,88 @@ async def list_invoices(
         sort_column = Invoice.file_name
     else:
         raise HTTPException(status_code=400, detail=f"Invalid sort_by: {sort_by}")
+    if sort_order not in ("asc", "desc"):
+        raise HTTPException(status_code=400, detail=f"Invalid sort_order: {sort_order}")
+    return sort_column
+
+
+@router.get("", response_model=InvoiceListResponse)
+async def list_invoices(
+    status: Annotated[str | None, Query(description="Filter by processing status")] = None,
+    search: Annotated[str | None, Query(description="Substring match on file name or vendor")] = None,
+    vendor: Annotated[str | None, Query(description="Vendor name substring")] = None,
+    min_amount: Annotated[float | None, Query(description="Minimum total amount")] = None,
+    max_amount: Annotated[float | None, Query(description="Maximum total amount")] = None,
+    confidence: Annotated[
+        float | None,
+        Query(ge=0.0, le=1.0, description="Minimum extraction confidence"),
+    ] = None,
+    validation_status: Annotated[
+        str | None,
+        Query(description="all_passed | has_failed | has_warning"),
+    ] = None,
+    date_from: Annotated[date | None, Query(description="Created on/Created after (inclusive)")] = None,
+    date_to: Annotated[date | None, Query(description="Created on/before (inclusive date)")] = None,
+    page: Annotated[int, Query(ge=1, description="Page number (1-indexed)")] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+    sort_by: Annotated[str, Query(description="Sort field")] = "created_at",
+    sort_order: Annotated[str, Query(description="Sort order")] = "desc",
+    session: AsyncSession = Depends(get_session),
+) -> InvoiceListResponse:
+    """List processed invoices with pagination and dashboard-equivalent filters."""
+    status_enum = _status_param(status)
+    sort_column = _sort_columns(sort_by, sort_order)
+
+    try:
+        count_query = invoice_list_count_select()
+        count_query = apply_invoice_list_filters(
+            count_query,
+            status=status_enum,
+            search_query=search,
+            date_from=date_from,
+            date_to=date_to,
+            vendor=vendor,
+            amount_min=min_amount,
+            amount_max=max_amount,
+            confidence_min=confidence,
+            validation_status=validation_status,
+        )
+        total_result = await session.execute(count_query)
+        total_items = total_result.scalar() or 0
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    query = base_invoice_list_select()
+    try:
+        query = apply_invoice_list_filters(
+            query,
+            status=status_enum,
+            search_query=search,
+            date_from=date_from,
+            date_to=date_to,
+            vendor=vendor,
+            amount_min=min_amount,
+            amount_max=max_amount,
+            confidence_min=confidence,
+            validation_status=validation_status,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     if sort_order == "desc":
         query = query.order_by(sort_column.desc())
     else:
         query = query.order_by(sort_column.asc())
 
-    # Get total count
-    from sqlalchemy import func
-
-    count_query = select(func.count()).select_from(Invoice)
-    if status:
-        count_query = count_query.where(Invoice.processing_status == status_enum)
-    total_result = await session.execute(count_query)
-    total_items = total_result.scalar() or 0
-
-    # Apply pagination
     offset = (page - 1) * page_size
-    query = query.offset(offset).limit(page_size)
+    query = query.options(selectinload(Invoice.extracted_data)).offset(offset).limit(page_size)
 
-    # Execute query
     result = await session.execute(query)
-    invoices = result.scalars().all()
+    invoices = result.unique().scalars().all()
 
-    # Build response
     invoice_summaries = []
     for invoice in invoices:
-        # Get extracted data for summary
-        extracted_data_query = select(ExtractedData).where(ExtractedData.invoice_id == invoice.id)
-        extracted_result = await session.execute(extracted_data_query)
-        extracted_data = extracted_result.scalar_one_or_none()
-
+        extracted_data = invoice.extracted_data
         summary = InvoiceSummary(
             id=str(invoice.id),
             file_name=invoice.file_name,
@@ -106,10 +154,7 @@ async def list_invoices(
             created_at=invoice.created_at,
             processed_at=invoice.processed_at,
         )
-        
-        # Include error message in response if processing failed
         if invoice.processing_status == ProcessingStatus.FAILED and invoice.error_message:
-            # Note: error_message is not in InvoiceSummary schema, but we log it for debugging
             logger.debug(
                 "Invoice processing failed",
                 invoice_id=str(invoice.id),
@@ -135,13 +180,176 @@ async def list_invoices(
     )
 
 
+_EXPORT_ROW_LIMIT = 50_000
+
+
+@router.get("/export/csv")
+async def export_invoices_csv(
+    status: Annotated[str | None, Query()] = None,
+    search: Annotated[str | None, Query()] = None,
+    vendor: Annotated[str | None, Query()] = None,
+    min_amount: Annotated[float | None, Query()] = None,
+    max_amount: Annotated[float | None, Query()] = None,
+    confidence: Annotated[float | None, Query(ge=0.0, le=1.0)] = None,
+    validation_status: Annotated[str | None, Query()] = None,
+    date_from: Annotated[date | None, Query()] = None,
+    date_to: Annotated[date | None, Query()] = None,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Export filtered invoice list as CSV (same filters as list; cap on row count)."""
+    from interface.dashboard.components.export_utils import export_invoice_list_to_csv
+
+    status_enum = _status_param(status)
+    try:
+        query = base_invoice_list_select()
+        query = apply_invoice_list_filters(
+            query,
+            status=status_enum,
+            search_query=search,
+            date_from=date_from,
+            date_to=date_to,
+            vendor=vendor,
+            amount_min=min_amount,
+            amount_max=max_amount,
+            confidence_min=confidence,
+            validation_status=validation_status,
+        )
+        query = query.order_by(Invoice.created_at.desc())
+        query = query.options(selectinload(Invoice.extracted_data)).limit(_EXPORT_ROW_LIMIT)
+        result = await session.execute(query)
+        invoices = result.unique().scalars().all()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    rows: list[dict] = []
+    for inv in invoices:
+        ed = inv.extracted_data
+        rows.append(
+            {
+                "invoice_id": str(inv.id),
+                "file_name": inv.file_name,
+                "processing_status": inv.processing_status.value,
+                "vendor_name": ed.vendor_name if ed else None,
+                "total_amount": float(ed.total_amount) if ed and ed.total_amount is not None else None,
+                "currency": ed.currency if ed else None,
+                "invoice_date": ed.invoice_date if ed else None,
+                "created_at": inv.created_at,
+            },
+        )
+
+    csv_bytes = export_invoice_list_to_csv(rows)
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="invoices-export.csv"'},
+    )
+
+
+@router.get("/{invoice_id}/export/pdf")
+async def export_invoice_pdf(
+    invoice_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Export a single invoice detail as PDF."""
+    from interface.dashboard.components.export_utils import export_invoice_detail_to_pdf
+
+    query = select(Invoice).where(Invoice.id == invoice_id)
+    result = await session.execute(query)
+    invoice = result.scalar_one_or_none()
+    if not invoice:
+        raise HTTPException(status_code=404, detail=f"Invoice not found: {invoice_id}")
+
+    extracted_query = select(ExtractedData).where(ExtractedData.invoice_id == invoice.id)
+    extracted_result = await session.execute(extracted_query)
+    extracted_data = extracted_result.scalar_one_or_none()
+
+    validation_query = select(ValidationResult).where(ValidationResult.invoice_id == invoice.id)
+    validation_result = await session.execute(validation_query)
+    validation_results = validation_result.scalars().all()
+
+    extracted_dict = None
+    if extracted_data:
+        extracted_dict = {
+            "vendor_name": extracted_data.vendor_name,
+            "invoice_number": extracted_data.invoice_number,
+            "invoice_date": extracted_data.invoice_date,
+            "total_amount": float(extracted_data.total_amount) if extracted_data.total_amount else None,
+            "subtotal": float(extracted_data.subtotal) if extracted_data.subtotal else None,
+            "tax_amount": float(extracted_data.tax_amount) if extracted_data.tax_amount else None,
+            "currency": extracted_data.currency,
+        }
+
+    detail_dict: dict = {
+        "invoice_id": str(invoice.id),
+        "file_name": invoice.file_name,
+        "processing_status": invoice.processing_status.value,
+        "created_at": invoice.created_at,
+        "extracted_data": extracted_dict,
+        "validation_results": [
+            {
+                "rule_name": vr.rule_name,
+                "status": vr.status.value,
+                "error_message": vr.error_message,
+            }
+            for vr in validation_results
+        ],
+    }
+
+    pdf_bytes = export_invoice_detail_to_pdf(detail_dict)
+    safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in invoice.file_name)[:80]
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="invoice-{safe_name}.pdf"'},
+    )
+
+
+def _resolved_invoice_file_path(invoice: Invoice) -> Path:
+    """Resolve invoice storage_path under data/ with traversal protection."""
+    data_dir = Path("data").resolve()
+    rel = invoice.storage_path
+    path_obj = Path(rel)
+    if path_obj.parts and path_obj.parts[0] == "data":
+        rel = str(Path(*path_obj.parts[1:]))
+    file_path = (data_dir / rel).resolve()
+    try:
+        file_path.relative_to(data_dir)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid storage path") from e
+    return file_path
+
+
+@router.get("/{invoice_id}/file")
+async def get_invoice_source_file(
+    invoice_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> FileResponse:
+    """Serve the original uploaded file for preview (PDF/image) when it exists on disk."""
+    query = select(Invoice).where(Invoice.id == invoice_id)
+    result = await session.execute(query)
+    invoice = result.scalar_one_or_none()
+    if not invoice:
+        raise HTTPException(status_code=404, detail=f"Invoice not found: {invoice_id}")
+
+    file_path = _resolved_invoice_file_path(invoice)
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Source file not found on server")
+
+    media_type, _ = mimetypes.guess_type(invoice.file_name or str(file_path))
+    return FileResponse(
+        path=file_path,
+        media_type=media_type or "application/octet-stream",
+        filename=invoice.file_name or file_path.name,
+    )
+
+
 @router.get("/{invoice_id}", response_model=InvoiceDetailResponse)
 async def get_invoice(
     invoice_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
 ) -> InvoiceDetailResponse:
     """Get detailed invoice information with status validation.
-    
+
     This endpoint validates that the invoice exists and returns current status.
     Status is always up-to-date as it's read directly from the database.
     """
@@ -152,7 +360,7 @@ async def get_invoice(
 
     if not invoice:
         raise HTTPException(status_code=404, detail=f"Invoice not found: {invoice_id}")
-    
+
     # Log status check for monitoring
     logger.debug(
         "Invoice status queried",
@@ -244,7 +452,7 @@ async def process_invoice(
 
     # Resolve file path - handle both relative and absolute paths
     data_dir = Path("data").resolve()
-    
+
     # Normalize the file path
     if Path(request.file_path).is_absolute():
         # If absolute path, check if it's within data directory
@@ -309,9 +517,9 @@ async def process_invoice(
             }
             # Enqueue returns job_id
             job_id = await queries.enqueue("process_invoice", json.dumps(payload).encode("utf-8"))
-            
+
             logger.info("Invoice processing enqueued", file_path=str(file_path), job_id=str(job_id))
-            
+
             return ProcessInvoiceResponse(
                 status="success",
                 data={
@@ -336,7 +544,7 @@ async def process_invoice(
         await session.commit()
 
         # Create processing job record (simplified for scaffold)
-        from core.models import ProcessingJob, JobType, ExecutionType
+        from core.models import ExecutionType, JobType, ProcessingJob
 
         job = ProcessingJob(
             id=uuid.uuid4(),
@@ -362,7 +570,7 @@ async def process_invoice(
         error_type = type(e).__name__
         from core.logging import format_error_message
         user_friendly_error = format_error_message(e, context={"stage": "api_processing"})
-        
+
         logger.error(
             "Invoice processing failed",
             file_path=str(file_path),

@@ -4,20 +4,18 @@ import uuid
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
-from interface.api.main import app
-
-client = TestClient(app)
+pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
 def sample_pdf_file(tmp_path: Path) -> Path:
     """Create a sample PDF file for testing."""
     pdf_file = tmp_path / "test_invoice.pdf"
-    # Create a minimal PDF file
-    pdf_content = b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj\nxref\n0 0\ntrailer\n<<\n/Root 1 0 R\n>>\n%%EOF"
-    pdf_file.write_bytes(pdf_content)
+    pdf_file.write_bytes(
+        b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj\nxref\n0 0\ntrailer\n<<\n/Root 1 0 R\n>>\n%%EOF",
+    )
     return pdf_file
 
 
@@ -25,118 +23,150 @@ def sample_pdf_file(tmp_path: Path) -> Path:
 def sample_image_file(tmp_path: Path) -> Path:
     """Create a sample image file for testing."""
     image_file = tmp_path / "test_invoice.png"
-    # Create a minimal PNG file (PNG header)
-    png_content = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-    image_file.write_bytes(png_content)
+    image_file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
     return image_file
 
 
-def test_upload_single_file(sample_pdf_file: Path):
-    """Test uploading a single file."""
-    with open(sample_pdf_file, "rb") as f:
-        response = client.post(
-            "/api/v1/uploads",
-            files={"files": ("test_invoice.pdf", f, "application/pdf")},
-            data={"subfolder": "uploads", "force_reprocess": "false"},
-        )
-    
+async def test_upload_single_file(client_with_db: AsyncClient, sample_pdf_file: Path) -> None:
+    content = sample_pdf_file.read_bytes()
+    response = await client_with_db.post(
+        "/api/v1/uploads",
+        files=[("files", ("test_invoice.pdf", content, "application/pdf"))],
+        data={"subfolder": "uploads", "force_reprocess": "false"},
+    )
+
     assert response.status_code == 202
     data = response.json()
     assert data["status"] == "success"
-    assert "data" in data
     assert len(data["data"]["uploads"]) == 1
     assert data["data"]["successful"] == 1
 
 
-def test_upload_file_type_validation():
-    """Test file type validation rejects unsupported types."""
-    unsupported_file = ("test.txt", b"test content", "text/plain")
-    response = client.post(
+async def test_upload_rejects_unsupported_type(client_with_db: AsyncClient) -> None:
+    response = await client_with_db.post(
         "/api/v1/uploads",
-        files={"files": unsupported_file},
+        files=[("files", ("test.txt", b"hello", "text/plain"))],
         data={"subfolder": "uploads"},
     )
-    
-    assert response.status_code in [400, 422]
-    # Should reject unsupported file type
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["data"]["failed"] == 1
+    item = payload["data"]["uploads"][0]
+    assert item["status"] == "failed"
+    assert "Unsupported" in (item.get("error_message") or "")
 
 
-def test_upload_file_size_validation(tmp_path: Path):
-    """Test file size validation enforces 50MB limit."""
-    # Create a file larger than 50MB
-    large_file = tmp_path / "large_file.pdf"
-    large_content = b"x" * (51 * 1024 * 1024)  # 51MB
-    large_file.write_bytes(large_content)
-    
-    with open(large_file, "rb") as f:
-        response = client.post(
-            "/api/v1/uploads",
-            files={"files": ("large_file.pdf", f, "application/pdf")},
-            data={"subfolder": "uploads"},
-        )
-    
-    # Should reject file that's too large
-    assert response.status_code in [400, 413]
+async def test_upload_rejects_over_max_size(
+    client_with_db: AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import interface.api.routes.uploads as uploads_mod
 
-
-def test_upload_multiple_files(sample_pdf_file: Path, sample_image_file: Path):
-    """Test uploading multiple files."""
-    files = [
-        ("files", ("test_invoice.pdf", open(sample_pdf_file, "rb"), "application/pdf")),
-        ("files", ("test_invoice.png", open(sample_image_file, "rb"), "image/png")),
-    ]
-    
-    response = client.post(
+    monkeypatch.setattr(uploads_mod, "MAX_FILE_SIZE", 64)
+    pdf = tmp_path / "big.pdf"
+    pdf.write_bytes(b"x" * 128)
+    response = await client_with_db.post(
         "/api/v1/uploads",
-        files=files,
+        files=[("files", ("big.pdf", pdf.read_bytes(), "application/pdf"))],
+        data={"subfolder": "uploads"},
+    )
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["data"]["failed"] == 1
+    msg = (payload["data"]["uploads"][0].get("error_message") or "").lower()
+    assert "exceeds maximum" in msg or "maximum allowed" in msg
+
+
+async def test_upload_empty_file_fails_row(client_with_db: AsyncClient, tmp_path: Path) -> None:
+    empty = tmp_path / "empty.pdf"
+    empty.write_bytes(b"")
+    response = await client_with_db.post(
+        "/api/v1/uploads",
+        files=[("files", ("empty.pdf", empty.read_bytes(), "application/pdf"))],
+        data={"subfolder": "uploads"},
+    )
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["data"]["failed"] == 1
+    assert "empty" in (payload["data"]["uploads"][0].get("error_message") or "").lower()
+
+
+async def test_upload_no_files_unprocessable(client_with_db: AsyncClient) -> None:
+    response = await client_with_db.post(
+        "/api/v1/uploads",
+        data={"subfolder": "uploads"},
+    )
+    assert response.status_code == 422
+
+
+async def test_upload_invalid_subfolder(client_with_db: AsyncClient, sample_pdf_file: Path) -> None:
+    content = sample_pdf_file.read_bytes()
+    response = await client_with_db.post(
+        "/api/v1/uploads",
+        files=[("files", ("test_invoice.pdf", content, "application/pdf"))],
+        data={"subfolder": "../evil"},
+    )
+    assert response.status_code == 400
+
+
+async def test_upload_multiple_files(
+    client_with_db: AsyncClient, sample_pdf_file: Path, sample_image_file: Path,
+) -> None:
+    response = await client_with_db.post(
+        "/api/v1/uploads",
+        files=[
+            ("files", ("test_invoice.pdf", sample_pdf_file.read_bytes(), "application/pdf")),
+            ("files", ("test_invoice.png", sample_image_file.read_bytes(), "image/png")),
+        ],
         data={"subfolder": "uploads", "force_reprocess": "false"},
     )
-    
-    # Close file handles
-    for _, (_, file_obj, _) in files:
-        file_obj.close()
-    
+
     assert response.status_code == 202
     data = response.json()
-    assert data["status"] == "success"
     assert len(data["data"]["uploads"]) == 2
 
 
-def test_upload_status_endpoint():
-    """Test getting upload status."""
-    # First need to upload a file to get an invoice_id
-    # This is a placeholder - actual test would upload first
+async def test_upload_status_endpoint_not_found(client_with_db: AsyncClient) -> None:
     invoice_id = uuid.uuid4()
-    response = client.get(f"/api/v1/uploads/{invoice_id}/status")
-    
-    # Should return 404 if invoice doesn't exist, or 200 with status if it does
-    assert response.status_code in [200, 404]
+    response = await client_with_db.get(f"/api/v1/uploads/{invoice_id}/status")
+    assert response.status_code == 404
 
 
-def test_upload_duplicate_detection(sample_pdf_file: Path):
-    """Test duplicate file detection."""
-    # Upload file first time
-    with open(sample_pdf_file, "rb") as f:
-        response1 = client.post(
-            "/api/v1/uploads",
-            files={"files": ("test_invoice.pdf", f, "application/pdf")},
-            data={"subfolder": "uploads", "force_reprocess": "false"},
-        )
-    
+async def test_upload_status_after_upload(client_with_db: AsyncClient, sample_pdf_file: Path) -> None:
+    content = sample_pdf_file.read_bytes()
+    up = await client_with_db.post(
+        "/api/v1/uploads",
+        files=[("files", ("test_invoice.pdf", content, "application/pdf"))],
+        data={"subfolder": "uploads", "force_reprocess": "false"},
+    )
+    assert up.status_code == 202
+    invoice_id = up.json()["data"]["uploads"][0]["invoice_id"]
+    assert invoice_id
+    st = await client_with_db.get(f"/api/v1/uploads/{invoice_id}/status")
+    assert st.status_code == 200
+    body = st.json()
+    assert body["data"]["invoice_id"] == invoice_id
+    assert body["data"]["file_name"] == "test_invoice.pdf"
+    assert body["data"]["processing_status"]
+
+
+async def test_upload_duplicate_detection(client_with_db: AsyncClient, sample_pdf_file: Path) -> None:
+    content = sample_pdf_file.read_bytes()
+    response1 = await client_with_db.post(
+        "/api/v1/uploads",
+        files=[("files", ("test_invoice.pdf", content, "application/pdf"))],
+        data={"subfolder": "uploads", "force_reprocess": "false"},
+    )
+
     assert response1.status_code == 202
-    
-    # Upload same file again
-    with open(sample_pdf_file, "rb") as f:
-        response2 = client.post(
-            "/api/v1/uploads",
-            files={"files": ("test_invoice.pdf", f, "application/pdf")},
-            data={"subfolder": "uploads", "force_reprocess": "false"},
-        )
-    
+
+    response2 = await client_with_db.post(
+        "/api/v1/uploads",
+        files=[("files", ("test_invoice.pdf", content, "application/pdf"))],
+        data={"subfolder": "uploads", "force_reprocess": "false"},
+    )
+
     assert response2.status_code == 202
     data = response2.json()
-    # Should detect duplicate
     assert data["data"]["skipped"] >= 1 or any(
         item["status"] == "duplicate" for item in data["data"]["uploads"]
     )
-
