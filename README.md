@@ -1,117 +1,146 @@
 # AI-Invoice: AI-driven accounts payable automation
 
-An **AI-native financial automation platform** for processing heterogeneous invoice formats (PDF, Excel, Images) into structured data. Leveraging **Agentic AI** for "Zero-Template" extraction and self-correcting validation.
+**AI-Invoice** ingests heterogeneous invoices (PDF, Excel, images) and turns them into structured fields using LLM-led pipelines—**without maintaining vendor-specific templates**.
 
-Automates the full invoice lifecycle — ingestion, extraction, validation, and routing — using LLM agents and ETL pipelines. Eliminates manual data entry from financial document processing for enterprise finance teams.
-
-**Services:**
-Invoice ingestion, Data extraction, GL coding, Approval routing, ERP integration
-
-**Highlights:**
-- LLM agent pipeline: Handles variable layouts
-- Multi-format input: PDF, scan, email, EDI
-- Exception handling: Flags anomalies automatically
-- Audit trail: Full traceability per document
-
-## 🆕 Key capabilities under development
-
-• Autonomous document intake agent: classifies document type, origin, and quality before routing
-• OCR + LLM extraction agent: fuses OCR output with LLM semantic parsing to reconstruct structured
-invoice data
-• Hybrid retrieval agent: resolves vendor identity, GL codes, and PO matching via Vector + SQL
-parallel search
-• Validation and exception agent: detects anomalies, flags low-confidence fields, and escalates for
-human review
-• Reconciliation agent: posts validated entries to accounting schemas and generates audit trails
-
-
-## 📸 Implementation at a Glance
-
-| Overview | Invoice List & Bulk Actions |
-|----------|-----------------------------|
-| ![AI-Invoice Review Dashboard – overview, filters, and status distribution](assets/1.png) | ![Invoice list table with confidence scores (80%-100%)](assets/2.png) |
-
-| Invoice Detail & Extracted Data | Validation Analysis |
-|----------------------------------|---------------------|
-| ![Single invoice view with file preview and extracted fields](assets/3.png) | ![Validation rules: passed, failed, and warnings](assets/4.png) |
-
-| Upload Files | Chat with Invoices |
-|--------------|--------------------|
-| ![Drag-and-drop upload for PDF, Excel, and images](assets/5.png) | ![Natural-language chatbot with vendor name search (e.g., Moore-Miller)](assets/6.png) |
-
-| Quality Metrics | Financial Summary |
-|-----------------|-------------------|
-| ![Extraction quality with confidence percentages (80%-100%)](assets/7.png) | ![Total amount, tax breakdown, and currency distribution](assets/8.png) |
+It covers the lifecycle from ingestion through extraction, validation, and routing. Broader goals (GL coding, approvals, ERP handoff) are on the [roadmap](#roadmap).
 
 ---
 
-## 🚀 Quick Start
+## What this platform does
 
-### 1. Prerequisites
+| Capability | Description |
+| :--- | :--- |
+| **Zero-template extraction** | The model reads layout and content variations and maps them to shared schemas—no fixed per-vendor layouts or manual template maintenance. |
+| **Self-correcting validation** | Failed checks can trigger alternate extraction strategies before an item is sent to human review. |
+| **Multi-format ingestion** | One funnel for **PDF**, **Excel/CSV**, and **images** (PNG, JPG, WEBP, etc.). |
+| **Duplicate control** | Content **hashing** and **versioning** to skip or control reprocessing ([details](./docs/duplicate-processing-logic.md)). |
+| **RAG & chat** | Query processed data via **pgvector** + sentence-transformers, with **SQL fallbacks** when vectors are unavailable (see RAG diagram below). |
+| **Resilience** | Pluggable-style configuration for runtime behavior ([resilient configuration](./docs/resilient-configuration.md)). |
+| **Scale-out helpers** | CLI **`--concurrency`** (default `2`) and **`--background`** to queue work through the API/job path. |
+| **REST API** | Async processing, uploads, exports, chat, quality, and OCR admin/compare under `/api/v1`. |
+
+---
+
+## Tech stack
+
+Aligned with `pyproject.toml` (exact versions live there).
+
+| Layer | Technology |
+| :--- | :--- |
+| **AI / extraction** | LlamaIndex (structured extraction), DeepSeek (chat / LLM), Docling (PDF → markdown) |
+| **OCR** | **PaddleOCR** for raster images (and rasterized PDF pages in OCR fallback); PDF text via Docling / PyPDF |
+| **Persistence** | PostgreSQL, **pgvector**, **pgqueuer** |
+| **API** | **FastAPI** (`interface/api/`), async SQLAlchemy, Pydantic v2 |
+| **UI** | **Streamlit** (`interface/dashboard/`); optional **Next.js** in `frontend/` (same API) |
+| **Migrations** | **Alembic** |
+| **Deployment** | **Docker Compose**; local workflows via `bin/*.sh` |
+
+PyPI keywords include `invoice`, `ocr`, `rag`, `fastapi`, `streamlit`; other heavy deps (PaddleOCR, Docling, LlamaIndex, …) are listed in `pyproject.toml`.
+
+---
+
+## Repository layout
+
+| Path | Role |
+| :--- | :--- |
+| **`brain/`** | Agent-style logic (e.g. chatbot orchestration, retrieval helpers) |
+| **`core/`** | Config, database, models, OCR registry, resilience hooks |
+| **`ingestion/`** | File discovery, PDF / Excel / image processors, handoff to extraction |
+| **`interface/`** | FastAPI REST API and Streamlit UI |
+| **`frontend/`** | Next.js + Tailwind + shadcn (optional) |
+| **`scripts/`** | CLI (e.g. `process_invoices.py`: concurrency, background queue, recursive scan) |
+| **`specs/`** | Design specs, OpenAPI drafts, migration plans |
+| **`tests/`** | Pytest (unit, integration, contract) |
+| **`bin/`** | Setup, API, dashboard, batch processing |
+
+Folders like **`.cursor/`** or **`.agent/`** (if present) are editor-only—not part of the runtime app.
+
+---
+
+## Screenshots
+
+| Overview | Invoice list & bulk actions |
+|----------|-----------------------------|
+| ![AI-Invoice Review Dashboard – overview, filters, and status distribution](assets/1.png) | ![Invoice list table with confidence scores (80%-100%)](assets/2.png) |
+
+| Detail & extracted data | Validation |
+|-------------------------|------------|
+| ![Single invoice view with file preview and extracted fields](assets/3.png) | ![Validation rules: passed, failed, and warnings](assets/4.png) |
+
+| Upload | Chat |
+|--------|------|
+| ![Drag-and-drop upload for PDF, Excel, and images](assets/5.png) | ![Natural-language chatbot with vendor search](assets/6.png) |
+
+| Quality | Financial summary |
+|---------|---------------------|
+| ![Extraction quality with confidence percentages](assets/7.png) | ![Total amount, tax, currency distribution](assets/8.png) |
+
+---
+
+## Quick start
+
+### Prerequisites
 - Python 3.12.2+
 - Docker and Docker Compose
-- PostgreSQL (Automated via Docker)
+- PostgreSQL (via Docker in the default setup)
 
-docker-compose up -d
-
-### 2. Setup & Start
 ```bash
-# Full environment setup (venv, dependencies, .env, DB, migrations)
+docker-compose up -d
+```
+
+### Setup and run
+```bash
+# venv, deps, .env, DB, migrations
 ./bin/setup.sh
 
-# Start API server (with reload for development)
+# API (dev reload)
 ./bin/api.sh start
 
-# Start API server in safe mode (no reload, for batch)
+# API (no reload, e.g. batch)
 ./bin/api.sh safe
 
-# Restart API server
 ./bin/api.sh restart
 
-# Start Dashboard (Port 8501)
+# Streamlit dashboard → http://localhost:8501
 ./bin/dashboard.sh
 ```
 
 ---
 
-## 📄 Usage
+## Usage
 
-
-### Process Invoices
-Batch process all invoices in the `data/` directory:
+### Batch processing
 ```bash
 ./bin/process_invoices.sh
-# Or use python scripts/process_invoices.py with custom options
+
+# Or: activate the venv from ./bin/setup.sh, then:
+python scripts/process_invoices.py --dir data --recursive --concurrency 2
+python scripts/process_invoices.py --dir data --recursive --background
 ```
 
-Or via API:
+Flags: `--dir` / `-d`, `--pattern` / `-p`, `--recursive` / `-r`, `--force` / `-f`, `--concurrency` / `-n` (default `2`), `--background` / `-b`, `--category` / `-c`, `--group` / `-g`, `--api-url`, `--data-root`. See `scripts/process_invoices.py --help`.
+
+### Single file via API
 ```bash
 curl -X POST "http://localhost:8000/api/v1/invoices/process" \
   -H "Content-Type: application/json" \
   -d '{"file_path": "invoice-1.png"}'
 ```
 
-### View Results
-- **Dashboard**: [http://localhost:8501](http://localhost:8501)
-- **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+### Where to look
+- **Streamlit:** [http://localhost:8501](http://localhost:8501)
+- **OpenAPI / docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Next.js (optional):** `cd frontend && npm run dev` — set `NEXT_PUBLIC_API_URL` to the API base including `/api/v1`.
 
 ---
 
-## 🏗️ Technical Overview
+## Architecture diagrams
 
-| Layer | Technology |
-| :--- | :--- |
-| **Persistence** | PostgreSQL (`pgvector`, `pgqueuer`) |
-| **Logic** | LlamaIndex, DeepSeek, Docling |
-| **Interface** | FastAPI, Streamlit |
+These complement [Tech stack](#tech-stack) and [What this platform does](#what-this-platform-does).
 
----
+### 1. Ingestion → extraction → storage
 
-## � Processing Pipeline Workflows
-
-### 1️⃣ Invoice Ingestion & Processing Pipeline
-
-Documents are processed **once** during ingestion, with extracted data stored for later querying:
+Documents are processed **once** at ingest; extracted data is stored for dashboards, API, and chat.
 
 ```mermaid
 graph TB
@@ -169,20 +198,13 @@ graph TB
     style H fill:#f3e5f5
 ```
 
-**Key Points:**
-- **Zero-Template Extraction**: AI reads and reasons about layout variations without hardcoded templates
-- **Validation with Auto-Retry**: Failed validations trigger alternative extraction strategies before human review
-- **Embeddings**: Generated during ingestion for semantic search (optional, chatbot falls back to SQL if unavailable)
-
-**On the way:**
-- LangGraph Multi-Agent Orchestration
-- Hybrid Retrieval Subsystem
+**Diagram notes:** Embeddings are produced during ingest for semantic search; the chatbot can fall back to SQL if vectors are missing. Invalid rows can go to a human review path before storage.
 
 ---
 
-### 2️⃣ RAG Chat Query Pipeline (Separate from Ingestion)
+### 2. RAG chat (read-only over stored data)
 
-The chatbot queries **already-processed** data using a hybrid retrieval strategy:
+The chatbot does **not** re-run extraction; it retrieves from what is already stored.
 
 ```mermaid
 graph TB
@@ -237,20 +259,30 @@ graph TB
     style L fill:#e1f5ff
 ```
 
-**Key Points:**
-- **Cascading Fallback Strategy**: Vector search (RAG) → SQL text search → SQL aggregates
-- **Intent-Based Routing**: Different query types use optimal retrieval methods
-- **No Re-Processing**: Queries only read stored data; no re-extraction happens
-- **Future Enhancement**: True parallel hybrid search (vector + SQL with RRF) documented but not yet implemented
+**Diagram notes:** Order of use is typically vector search → SQL text search → SQL aggregates. True parallel hybrid search (e.g. RRF across vector + SQL) is a future enhancement.
 
 ---
 
-## �📚 Documentation
-- **[Technical Stack & Architecture](./docs/tech-stack.md)** — Stack by layer, alternatives, and processing logic.
-- **[Setup & Scaffold](./docs/setup-scaffold-1.md)** — Step-by-step implementation guide.
-- **[Dashboard Improvements](./docs/002-dashboard-improvements.md)** — Analytics, export, filters, and bulk actions.
-- **[Dataset Upload UI](./docs/003-dataset-upload-ui-implementation.md)** — Web upload and processing flow.
-- **[Invoice Chatbot](./docs/004-invoice-chatbot-implementation.md)** — RAG-backed chat over invoice data.
-- **[Duplicate Processing Logic](./docs/duplicate-processing-logic.md)** — Hashing and versioning.
-- **[Resilient Configuration](./docs/resilient-configuration.md)** — Module plugability and runtime configuration APIs.
-- **[Docs Index](./docs/README.md)** — Full documentation index and RAG stack analysis.
+## Roadmap
+
+**In design / upcoming**
+
+- LangGraph-style **multi-agent orchestration** for ingestion and extraction
+- **Hybrid retrieval subsystem** (stronger vector + SQL fusion)
+- Autonomous **intake agent** (document type, origin, quality) before routing
+- **Hybrid retrieval agent** for vendor / GL / PO resolution (vector + SQL)
+- **Validation & exception agent** with clearer escalation paths
+- **Reconciliation agent** toward accounting schemas and audit trails
+
+---
+
+## Documentation
+
+- **[Technical stack & architecture](./docs/tech-stack.md)** — Layers, alternatives, processing logic
+- **[Setup & scaffold](./docs/setup-scaffold-1.md)** — Step-by-step setup
+- **[Dashboard improvements](./docs/002-dashboard-improvements.md)** — Analytics, export, filters, bulk actions
+- **[Dataset upload UI](./docs/003-dataset-upload-ui-implementation.md)** — Web upload flow
+- **[Invoice chatbot](./docs/004-invoice-chatbot-implementation.md)** — RAG-backed chat
+- **[Duplicate processing logic](./docs/duplicate-processing-logic.md)** — Hashing and versioning
+- **[Resilient configuration](./docs/resilient-configuration.md)** — Module plugability and runtime APIs
+- **[Docs index](./docs/README.md)** — Full index and RAG notes
